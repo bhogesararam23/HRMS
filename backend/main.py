@@ -641,90 +641,86 @@ async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, a
 
 @app.get("/payroll/me", response_model=PayrollResponse)
 async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 1. Determine Previous Month Range
     today = date.today()
-    start_of_month = date(today.year, today.month, 1)
+    # First day of this month
+    this_month_first = date(today.year, today.month, 1)
+    # Last day of previous month
+    prev_month_last = this_month_first - timedelta(days=1)
+    # First day of previous month
+    prev_month_first = date(prev_month_last.year, prev_month_last.month, 1)
     
-    # 1. Cap calculation at Today (Pro-rata)
-    calc_end_date = today
+    # Label for UI
+    month_label = prev_month_first.strftime("%B %Y")
     
-    # 2. Fetch all necessary data for the period [start_of_month, calc_end_date]
+    # 2. Daily Iteration Logic for Previous Month
+    days_in_month = (prev_month_last - prev_month_first).days + 1
     
-    # A. Attendance (Present/Late/Half-day)
     attendance_records = db.query(Attendance).filter(and_(
         Attendance.user_id == current_user.id,
-        Attendance.date >= start_of_month,
-        Attendance.date <= calc_end_date,
+        Attendance.date >= prev_month_first,
+        Attendance.date <= prev_month_last,
         Attendance.status.in_(["Present", "Late", "Half-day"])
     )).all()
     present_dates = {rec.date for rec in attendance_records}
     
-    # B. Approved Leaves
     leaves = db.query(Leave).filter(and_(
         Leave.user_id == current_user.id,
         Leave.status == LeaveStatus.APPROVED.value,
-        Leave.end_date >= start_of_month,
-        Leave.start_date <= calc_end_date
+        Leave.end_date >= prev_month_first,
+        Leave.start_date <= prev_month_last
     )).all()
     
-    # C. Holidays
     holidays = db.query(Holiday).filter(and_(
-        Holiday.date >= start_of_month,
-        Holiday.date <= calc_end_date
+        Holiday.date >= prev_month_first,
+        Holiday.date <= prev_month_last
     )).all()
     holiday_dates = {h.date for h in holidays}
     
-    # 3. Strictly Calculate Unpaid Absences Loop
+    # Calculate Absences
     unpaid_absences = 0
-    working_days_passed = 0
+    working_days_count = 0
     
-    current_d = start_of_month
-    while current_d <= calc_end_date:
-        is_weekend = current_d.weekday() >= 5 # 5=Sat, 6=Sun
-        is_holiday = current_d in holiday_dates
+    iter_date = prev_month_first
+    while iter_date <= prev_month_last:
+        is_weekend = iter_date.weekday() >= 5
+        is_holiday = iter_date in holiday_dates
         is_working_day = not (is_weekend or is_holiday)
         
         if is_working_day:
-            working_days_passed += 1
-            
-            # Check if present
-            if current_d in present_dates:
-                pass # Present, no deduction
+            working_days_count += 1
+            if iter_date in present_dates:
+                pass 
             else:
-                # Check if on approved leave
                 is_on_leave = False
                 for l in leaves:
-                    if l.start_date <= current_d <= l.end_date:
+                    if l.start_date <= iter_date <= l.end_date:
                         is_on_leave = True
                         break
-                
                 if not is_on_leave:
-                    # Not present, not a weekend/holiday, not on leave => ABSENT
                     unpaid_absences += 1
         
-        current_d += timedelta(days=1)
+        iter_date += timedelta(days=1)
         
-    # 4. Calculation
+    # 3. Financial Calculation
     base = float(current_user.base_salary) if hasattr(current_user, 'base_salary') and current_user.base_salary else 50000.0
     
-    # Standard 30-day calculation basis
-    daily_rate = base / 30
+    per_day_salary = base / days_in_month
     
-    deductions = daily_rate * unpaid_absences
+    deductions = per_day_salary * unpaid_absences
     tax = base * 0.12
-    net = base - tax - deductions
+    net = base - deductions - tax
     
-    # Handle negative net salary (edge case)
-    if net < 0:
-        net = 0
-
+    if net < 0: net = 0
+    
     return PayrollResponse(
         user_id=current_user.id,
         name=current_user.name,
-        month=today.strftime("%B %Y"),
+        month=month_label,
         base_salary=round(base, 2),
         tax=round(tax, 2),
         deductions=round(deductions, 2),
         net_salary=round(net, 2),
         absent_days=unpaid_absences,
-        working_days=working_days_passed # Showing passed working days instead of total 22
+        working_days=working_days_count
     )
