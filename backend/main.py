@@ -131,19 +131,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Configuration - Allow React frontend
+# CORS Configuration
+origins = ["*"] # Default check for local dev
+import os
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    origins = allowed_origins_env.split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Run on server startup:
+    1. Initialize Database
+    2. Seed with Admin/Employee if missing
+    """
+    logger.info("Startup Event: Checking Database...")
+    init_db()
 
 # ============================================================
 # Helper Functions
