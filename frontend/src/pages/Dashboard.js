@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
@@ -253,6 +254,7 @@ function AdminDashboard() {
 }
 
 function EmployeeDashboard({ user }) {
+  const navigate = useNavigate();
   const { authFetch } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -403,15 +405,24 @@ function EmployeeDashboard({ user }) {
             <CardTitle className="text-primary">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-card rounded-lg">
+            <div
+              onClick={() => navigate('/attendance')}
+              className="flex items-center justify-between p-3 bg-card rounded-lg cursor-pointer hover:bg-accent active:scale-[0.98] transition-all"
+            >
               <span className="text-sm font-medium">Mark Attendance</span>
               <span className="text-xs text-muted-foreground">→</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-card rounded-lg">
+            <div
+              onClick={() => navigate('/leaves')}
+              className="flex items-center justify-between p-3 bg-card rounded-lg cursor-pointer hover:bg-accent active:scale-[0.98] transition-all"
+            >
               <span className="text-sm font-medium">Apply for Leave</span>
               <span className="text-xs text-muted-foreground">→</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-card rounded-lg">
+            <div
+              onClick={() => navigate('/payroll')}
+              className="flex items-center justify-between p-3 bg-card rounded-lg cursor-pointer hover:bg-accent active:scale-[0.98] transition-all"
+            >
               <span className="text-sm font-medium">View Payslip</span>
               <span className="text-xs text-muted-foreground">→</span>
             </div>
