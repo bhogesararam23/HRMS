@@ -1,114 +1,132 @@
-# NexusHR 🚀
-> **The Intelligent Workforce Operating System.**  
-> *Logic-First. Automation-Ready. Production-Grade.*
+# 🚀 NexusHR
 
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+**The Logic-First HRMS for the Future of Work.**
 
----
+> 🏆 Built by **Team Null Vector** for Hackathon 2026
 
-## 📋 Project Overview
-
-**NexusHR** is a next-generation Human Resource Management System designed to eliminate administrative chaos through strict business logic and automation. Unlike traditional "dumb" CRUD applications, NexusHR enforces intelligent state management for attendance, prevents scheduling conflicts with smart leave validation, and delivers instant, accurate payroll calculations. 
-
-Built with a high-performance **FastAPI** backend and a sleek **React 19** frontend, it offers a seamless, secure, and role-based experience for modern organizations.
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 
 ---
 
-## ✨ Key Features
+## ✨ The "Null Vector" Advantage
 
-### 🔐 Backend Intelligence (FastAPI + Python)
-*   **Smart Attendance System:** State-machine enforced logic prevents "Double Check-ins" and ensures shifts are completed in valid sequences. Weekend restrictions included.
-*   **Intelligent Leave Validation:** 
-    *   Prevents application for past dates.
-    *   **Overlap Detection:** Algorithmically blocks leave requests that conflict with existing approved or pending leaves.
-*   **Automated Payroll Engine:** Real-time salary calculation engine that computes Tax (12%), Deductions (based on absent days), and Net Salary on defined base brackets.
-*   **RBAC Security:** Secure JWT (JSON Web Token) authentication with strict separation between **Admin** and **Employee** roles.
-
-### 💻 Frontend Excellence (React + Tailwind)
-*   **Real-Time Dashboard:** Interactive visual analytics powered by **Recharts** to visualize attendance trends and leave statuses.
-*   **Modern UI/UX:** Built with **Radix UI** primitives and **TailwindCSS** for a polished, accessible, and responsive interface.
-*   **Instant Feedback:** Action-driven toast notifications via **Sonner** for success/error states (e.g., "Check-in Successful" or "Weekend Check-in Blocked").
+| Feature | Description |
+|---------|-------------|
+| 🎯 **Zero-Error Payroll** | Auto-detects month boundaries to prevent future-date deductions. No more "ghost absences" for days that haven't happened yet. |
+| 🔐 **Smart Attendance** | State-machine logic prevents double check-ins and enforces business rules at the API layer. |
+| ⚡ **Local-First Speed** | Optimized React architecture with instant UI feedback using optimistic updates and proper loading states. |
+| 📄 **PDF Generation** | Professional payslips generated server-side with ReportLab - no client-side dependencies required. |
 
 ---
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-*   **Framework:** React 19 (via Vite/CRA)
-*   **Styling:** TailwindCSS, Radix UI
-*   **State & Forms:** React Hook Form, Zod (Validation)
-*   **Visualization:** Recharts
-*   **HTTP:** Axios
+- **React 19** with Hooks
+- **TailwindCSS** for styling
+- **Shadcn/UI** component library
+- **Recharts** for data visualization
+- **React Router DOM** for navigation
 
 ### Backend
-*   **API:** FastAPI (Python 3.12+)
-*   **Database:** SQLAlchemy ORM with SQLite
-*   **Authentication:** Python-Jose (JWT), Passlib (Bcrypt)
-*   **Validation:** Pydantic Models
+- **Python FastAPI** - High-performance async API
+- **SQLAlchemy ORM** - Database abstraction
+- **SQLite** - Zero-config database (Postgres-ready)
+- **Pydantic** - Data validation
+- **ReportLab** - PDF generation
+- **python-jose** - JWT authentication
 
 ---
 
-## 🚀 Installation & Setup Guide
+## 🚀 Quick Start (Judge-Friendly!)
 
 ### Prerequisites
-*   Python 3.10+
-*   Node.js 18+
+- Python 3.10+
+- Node.js 18+
 
-### 1️⃣ Backend Setup
+### Step 1: Backend Setup
 ```bash
 cd backend
-
-# Create virtual environment (Optional but Recommended)
-python -m venv venv
-# Windows: venv\Scripts\activate
-# Mac/Linux: source venv/bin/activate
-
-# Install Dependencies
 pip install -r requirements.txt
-
-# Run the Server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python seed_data.py
+uvicorn main:app --reload
 ```
-*Server runs at `http://localhost:8000`*
+> Backend runs on `http://localhost:8000`
 
-### 2️⃣ Frontend Setup
+### Step 2: Frontend Setup
 ```bash
 cd frontend
-
-# Install Node Modules
 npm install
-
-# Start Development Server
 npm start
 ```
-*App runs at `http://localhost:3000`*
+> Frontend runs on `http://localhost:3000`
 
 ---
 
-## 🔑 Default Credentials (For Demo)
+## 🔑 Demo Credentials
+
 | Role | Email | Password |
 |------|-------|----------|
-| **Admin** | `admin@hrms.com` | `admin123` |
-| **Employee** | `employee@hrms.com` | `user123` |
+| 👮‍♂️ **Admin** | `admin@hrms.com` | `admin123` |
+| 👨‍💻 **Employee** | `rahul@hrms.com` | `pass123` |
 
 ---
 
-## 📡 API Documentation
-Key endpoints available in the system:
+## 📸 Screenshots
 
-| Method | Endpoint | Description |
-|:---:|---|---|
-| `POST` | `/token` | Authenticate user & retrieve Access Token |
-| `POST` | `/attendance/check-in` | **Strict** check-in (prevents duplicate sessions) |
-| `POST` | `/attendance/check-out` | **Strict** check-out (requires active session) |
-| `GET` | `/attendance/my-history` | Fetch last 7 days of attendance logs |
-| `POST` | `/leaves` | Apply for leave (w/ Overlap & Date Validation) |
-| `GET` | `/payroll/me` | **Dynamic Calculation** of Salary, Tax & Deductions |
+### Dashboard
+![Dashboard Screenshot](screenshots/dashboard.png)
+
+### Attendance
+![Attendance Screenshot](screenshots/attendance.png)
+
+### Payroll
+![Payroll Screenshot](screenshots/payroll.png)
 
 ---
 
-Made with ❤️ by [Your Name]
+## 📂 Project Structure
+
+```
+HRMS/
+├── backend/
+│   ├── main.py          # FastAPI application
+│   ├── models.py         # SQLAlchemy models
+│   ├── database.py       # DB configuration
+│   ├── seed_data.py      # Demo data seeder
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── pages/        # React pages
+│   │   ├── components/   # UI components
+│   │   └── contexts/     # Auth context
+│   └── package.json
+└── README.md
+```
+
+---
+
+## 🎯 Features
+
+- ✅ **Authentication** - JWT-based login with role-based access
+- ✅ **Dashboard** - Real-time stats with charts
+- ✅ **Attendance** - Check-in/out with state validation
+- ✅ **Leave Management** - Apply, approve, reject workflow
+- ✅ **Payroll** - Auto-calculated with PDF download
+- ✅ **Responsive UI** - Works on desktop and mobile
+
+---
+
+## 👥 Team Null Vector
+
+Built with ❤️ for Hackathon 2026
+
+---
+
+## 📜 License
+
+MIT License - Feel free to use and modify!
