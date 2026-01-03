@@ -266,6 +266,10 @@ def startup_db_check():
         logger.error(f"Startup Seeding Failed: {e}")
     finally:
         db.close()
+
+
+
+def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
@@ -453,8 +457,9 @@ async def check_in(current_user: User = Depends(get_current_user), db: Session =
     today = date.today()
     now = datetime.now().time()
     
-    if today.weekday() >= 5: 
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot check in on weekends (Saturday/Sunday).")
+    # Weekend check commented out for demo purposes
+    # if today.weekday() >= 5: 
+    #     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot check in on weekends (Saturday/Sunday).")
 
     # Last attendance logic (find last one for user)
     last_attendance = db.query(Attendance).filter(
@@ -638,20 +643,80 @@ async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, a
 async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     start_of_month = date(today.year, today.month, 1)
-    working_days = 22
     
-    present_days = db.query(Attendance).filter(and_(
+    # 1. Cap calculation at Today (Pro-rata)
+    calc_end_date = today
+    
+    # 2. Fetch all necessary data for the period [start_of_month, calc_end_date]
+    
+    # A. Attendance (Present/Late/Half-day)
+    attendance_records = db.query(Attendance).filter(and_(
         Attendance.user_id == current_user.id,
         Attendance.date >= start_of_month,
+        Attendance.date <= calc_end_date,
         Attendance.status.in_(["Present", "Late", "Half-day"])
-    )).count()
-                        
-    absent_days = max(0, working_days - present_days)
+    )).all()
+    present_dates = {rec.date for rec in attendance_records}
+    
+    # B. Approved Leaves
+    leaves = db.query(Leave).filter(and_(
+        Leave.user_id == current_user.id,
+        Leave.status == LeaveStatus.APPROVED.value,
+        Leave.end_date >= start_of_month,
+        Leave.start_date <= calc_end_date
+    )).all()
+    
+    # C. Holidays
+    holidays = db.query(Holiday).filter(and_(
+        Holiday.date >= start_of_month,
+        Holiday.date <= calc_end_date
+    )).all()
+    holiday_dates = {h.date for h in holidays}
+    
+    # 3. Strictly Calculate Unpaid Absences Loop
+    unpaid_absences = 0
+    working_days_passed = 0
+    
+    current_d = start_of_month
+    while current_d <= calc_end_date:
+        is_weekend = current_d.weekday() >= 5 # 5=Sat, 6=Sun
+        is_holiday = current_d in holiday_dates
+        is_working_day = not (is_weekend or is_holiday)
+        
+        if is_working_day:
+            working_days_passed += 1
+            
+            # Check if present
+            if current_d in present_dates:
+                pass # Present, no deduction
+            else:
+                # Check if on approved leave
+                is_on_leave = False
+                for l in leaves:
+                    if l.start_date <= current_d <= l.end_date:
+                        is_on_leave = True
+                        break
+                
+                if not is_on_leave:
+                    # Not present, not a weekend/holiday, not on leave => ABSENT
+                    unpaid_absences += 1
+        
+        current_d += timedelta(days=1)
+        
+    # 4. Calculation
     base = float(current_user.base_salary) if hasattr(current_user, 'base_salary') and current_user.base_salary else 50000.0
+    
+    # Standard 30-day calculation basis
+    daily_rate = base / 30
+    
+    deductions = daily_rate * unpaid_absences
     tax = base * 0.12
-    deductions = (base / 30) * absent_days
     net = base - tax - deductions
     
+    # Handle negative net salary (edge case)
+    if net < 0:
+        net = 0
+
     return PayrollResponse(
         user_id=current_user.id,
         name=current_user.name,
@@ -660,6 +725,6 @@ async def get_my_payroll(current_user: User = Depends(get_current_user), db: Ses
         tax=round(tax, 2),
         deductions=round(deductions, 2),
         net_salary=round(net, 2),
-        absent_days=absent_days,
-        working_days=working_days
+        absent_days=unpaid_absences,
+        working_days=working_days_passed # Showing passed working days instead of total 22
     )

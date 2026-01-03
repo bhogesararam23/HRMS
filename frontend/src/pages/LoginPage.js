@@ -112,7 +112,7 @@ export default function LoginPage() {
             <p className="text-xs font-medium text-muted-foreground mb-2">Demo Credentials:</p>
             <div className="space-y-1 text-xs">
               <p className="text-foreground">Admin: <span className="font-mono bg-muted px-2 py-0.5 rounded">admin@hrms.com</span></p>
-              <p className="text-foreground">Employee: <span className="font-mono bg-muted px-2 py-0.5 rounded">employee@hrms.com</span></p>
+              <p className="text-foreground">Employee: <span className="font-mono bg-muted px-2 py-0.5 rounded">rahul@hrms.com</span></p>
               <p className="text-muted-foreground mt-2">Passwords: <span className="font-mono">admin123 / user123</span></p>
             </div>
           </div>
