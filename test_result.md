@@ -101,3 +101,151 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Test the HRMS Dashboard application comprehensively with login flows, employee/admin dashboards, attendance, leave management, payroll, and admin-specific features"
+
+frontend:
+  - task: "Login Flow - Employee"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/LoginPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Initial testing setup - need to verify employee login with employee@company.com"
+
+  - task: "Login Flow - Admin"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/LoginPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Initial testing setup - need to verify admin login with admin@company.com"
+
+  - task: "Employee Dashboard Features"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to verify dashboard stats, attendance chart, and quick links for employee role"
+
+  - task: "Admin Dashboard Features"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to verify admin-specific stats, attendance trends chart, pending approvals, and holidays"
+
+  - task: "Attendance Module"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Attendance.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to test check in/out functionality, stats cards, and attendance history table"
+
+  - task: "Leave Management"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Leaves.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to test leave balance display, apply for leave form, and leave requests list"
+
+  - task: "Payroll Module"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Payroll.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to verify salary overview cards, detailed payslip, and download functionality"
+
+  - task: "Employee Management (Admin)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Employees.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to test stats cards, search functionality, department filters, and employee table"
+
+  - task: "Approval Center (Admin)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/ApprovalCenter.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to test approval stats, pending requests display, approve/reject functionality"
+
+  - task: "Navigation & UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/layouts/DashboardLayout.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "testing"
+        - comment: "Need to verify sidebar navigation, header, user dropdown, and responsive design"
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+
+test_plan:
+  current_focus:
+    - "Login Flow - Employee"
+    - "Login Flow - Admin"
+    - "Employee Dashboard Features"
+    - "Admin Dashboard Features"
+    - "Attendance Module"
+    - "Leave Management"
+    - "Payroll Module"
+    - "Employee Management (Admin)"
+    - "Approval Center (Admin)"
+    - "Navigation & UI"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+    - message: "Starting comprehensive HRMS Dashboard testing. Will test all login flows, dashboard features, and core modules for both employee and admin roles. Testing URL: http://localhost:3000"
