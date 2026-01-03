@@ -1,65 +1,85 @@
 """
-Plain Python Models for In-Memory DB (Vercel)
+SQLAlchemy Models for HRMS Backend
 """
-from datetime import datetime
+from sqlalchemy import Column, Integer, String, Date, Time, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from database import Base
 import enum
+
 
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
     EMPLOYEE = "employee"
+
 
 class LeaveStatus(str, enum.Enum):
     PENDING = "Pending"
     APPROVED = "Approved"
     REJECTED = "Rejected"
 
-class User:
-    def __init__(self, id=None, email=None, name=None, hashed_password=None, role="employee", department="General", position="Staff", phone=None, base_salary=50000):
-        self.id = id
-        self.email = email
-        self.name = name
-        self.hashed_password = hashed_password
-        self.role = role
-        self.department = department
-        self.position = position
-        self.phone = phone
-        self.base_salary = base_salary
-        self.created_at = datetime.now()
-        # Relationships (simulated)
-        self.attendances = []
-        self.leaves = []
 
-class Attendance:
-    def __init__(self, id=None, user_id=None, date=None, status="Present", in_time=None, out_time=None, work_hours=None):
-        self.id = id
-        self.user_id = user_id
-        self.date = date
-        self.status = status
-        self.in_time = in_time
-        self.out_time = out_time
-        self.work_hours = work_hours
-        self.created_at = datetime.now()
-        # Relationship
-        self.user = None
+class User(Base):
+    """User model for authentication and employee management"""
+    __tablename__ = "users"
 
-class Leave:
-    def __init__(self, id=None, user_id=None, start_date=None, end_date=None, reason=None, leave_type="Annual", status="Pending"):
-        self.id = id
-        self.user_id = user_id
-        self.start_date = start_date
-        self.end_date = end_date
-        self.reason = reason
-        self.leave_type = leave_type
-        self.status = status
-        self.applied_at = datetime.now()
-        self.reviewed_at = None
-        self.reviewed_by = None
-        # Relationship
-        self.user = None
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(50), default=UserRole.EMPLOYEE.value)
+    department = Column(String(100), default="General")
+    position = Column(String(100), default="Staff")
+    phone = Column(String(20), nullable=True)
+    base_salary = Column(Integer, default=50000)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    attendances = relationship("Attendance", back_populates="user")
+    leaves = relationship("Leave", back_populates="user", foreign_keys="Leave.user_id")
 
-class Holiday:
-    def __init__(self, id=None, name=None, date=None, description=None):
-        self.id = id
-        self.name = name
-        self.date = date
-        self.description = description
+
+class Attendance(Base):
+    """Attendance records for employees"""
+    __tablename__ = "attendances"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    status = Column(String(50), default="Present")  # Present, Absent, Late, Half-day
+    in_time = Column(Time, nullable=True)
+    out_time = Column(Time, nullable=True)
+    work_hours = Column(String(20), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="attendances")
+
+
+class Leave(Base):
+    """Leave requests from employees"""
+    __tablename__ = "leaves"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    reason = Column(String(500), nullable=False)
+    leave_type = Column(String(50), default="Annual")  # Annual, Sick, Personal, etc.
+    status = Column(String(50), default=LeaveStatus.PENDING.value)
+    applied_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(Integer, nullable=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="leaves", foreign_keys=[user_id])
+
+
+class Holiday(Base):
+    """Company holidays"""
+    __tablename__ = "holidays"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    date = Column(Date, nullable=False, unique=True)
+    description = Column(String(500), nullable=True)

@@ -1,11 +1,12 @@
 """
 HRMS Backend - FastAPI Application
-Optimized for Vercel Serverless (In-Memory Store)
+High-performance Python backend with Hybrid Database (Postgres/SQLite)
 """
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-# Removed SQLAlchemy imports
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from datetime import datetime, date, time, timedelta
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr
@@ -14,7 +15,7 @@ from passlib.context import CryptContext
 import logging
 
 # New imports
-from database import get_db, init_db, MockSession
+from database import get_db, engine, Base, SessionLocal
 from models import User, Attendance, Leave, Holiday, UserRole, LeaveStatus
 
 # ============================================================
@@ -62,6 +63,7 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     position: Optional[str] = None
     phone: Optional[str] = None
+    base_salary: Optional[float] = 50000.0
     
     class Config:
         from_attributes = True
@@ -133,28 +135,18 @@ class PayrollResponse(BaseModel):
 
 app = FastAPI(
     title="HRMS Backend API",
-    description="High-performance Python backend for HRMS system (Vercel In-Memory)",
+    description="High-performance Python backend for HRMS system (Postgres/SQLite)",
     version="1.0.0"
 )
 
+# CORS Configuration for Render Deployment (Allow All)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "https://your-vercel-app-url.vercel.app" # Add your vercel domain later
-    ],
+    allow_origins=["*"],  # Allow all origins for Vercel/Render communication
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialize data on startup (Vercel cold start)
-@app.on_event("startup")
-async def startup_event():
-    init_db()
 
 # ============================================================
 # Helper Functions
@@ -172,21 +164,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_user_by_email(email: str, users_list: List[User]) -> Optional[User]:
-    for u in users_list:
-        if u.email == email:
-            return u
-    return None
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    return db.query(User).filter(User.email == email).first()
 
-def authenticate_user(db: MockSession, email: str, password: str) -> Optional[User]:
-    user = get_user_by_email(email, db.users) # db.users is a list property
+def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    user = get_user_by_email(db, email)
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
         return None
     return user
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: MockSession = Depends(get_db)) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -200,7 +189,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: MockSession 
     except JWTError:
         raise credentials_exception
     
-    user = get_user_by_email(email, db.users)
+    user = get_user_by_email(db, email)
     if user is None:
         raise credentials_exception
     return user
@@ -214,11 +203,173 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 # ============================================================
-# Endpoints (Refactored for In-Memory)
+# Startup Seeding (For Render Ephemeral Disk)
+# ============================================================
+
+@app.on_event("startup")
+def startup_db_check():
+    """
+    Check if DB is empty on startup (Render restarts wipe disk if using SQLite).
+    If empty, seed initial data.
+    """
+    db = SessionLocal()
+    try:
+        Base.metadata.create_all(bind=engine)
+        
+        # Check if Admin exists
+        if not db.query(User).filter(User.email == "admin@hrms.com").first():
+            logger.info("Database empty! Seeding initial data...")
+            
+             # Seed Admin
+            admin = User(
+                email="admin@hrms.com",
+                name="Admin User",
+                hashed_password=get_password_hash("admin123"),
+                role=UserRole.ADMIN.value,
+                department="Management",
+                position="HR Administrator",
+                base_salary=80000
+            )
+            db.add(admin)
+            
+            # Seed Employee
+            employee = User(
+                email="employee@hrms.com",
+                name="John Employee",
+                hashed_password=get_password_hash("user123"),
+                role=UserRole.EMPLOYEE.value,
+                department="Engineering",
+                position="Software Developer",
+                base_salary=50000
+            )
+            db.add(employee)
+            db.commit()
+
+            # Seed 5 Mock Attendance Records
+            today = date.today()
+            for i in range(5):
+                d = today - timedelta(days=i+1)
+                db.add(Attendance(
+                    user_id=employee.id,
+                    date=d,
+                    status="Present",
+                    in_time=time(9,0),
+                    out_time=time(18,0),
+                    work_hours="9h 0m"
+                ))
+            db.commit()
+            logger.info("Seeding complete!")
+        else:
+            logger.info("Database already initialized.")
+            
+    except Exception as e:
+        logger.error(f"Startup Seeding Failed: {e}")
+    finally:
+        db.close()
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    return db.query(User).filter(User.email == email).first()
+
+def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    user = get_user_by_email(db, email)
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = get_user_by_email(db, email)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+# ============================================================
+# Database Initialization Endpoint
+# ============================================================
+
+@app.get("/init-db")
+async def init_database(db: Session = Depends(get_db)):
+    """
+    Initialize database tables and seed data.
+    Useful for Vercel deployment where we can't run terminal commands easily.
+    """
+    try:
+        # Create Tables
+        Base.metadata.create_all(bind=engine)
+        
+        # Check if initialized
+        if db.query(User).count() > 0:
+            return {"message": "Database already initialized"}
+            
+        # Seed Admin
+        admin = User(
+            email="admin@hrms.com",
+            name="Admin User",
+            hashed_password=get_password_hash("admin123"),
+            role=UserRole.ADMIN.value,
+            department="Management",
+            position="HR Administrator",
+            base_salary=80000
+        )
+        db.add(admin)
+        
+        # Seed Employee
+        employee = User(
+            email="employee@hrms.com",
+            name="John Employee",
+            hashed_password=get_password_hash("user123"),
+            role=UserRole.EMPLOYEE.value,
+            department="Engineering",
+            position="Software Developer",
+            base_salary=50000
+        )
+        db.add(employee)
+        
+        db.commit()
+        return {"message": "Database initialized and seeded successfully!"}
+        
+    except Exception as e:
+        logger.error(f"Init DB Error: {e}")
+        return {"error": str(e)}
+
+# ============================================================
+# Endpoints (Restored SQLAlchemy Logic)
 # ============================================================
 
 @app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: MockSession = Depends(get_db)):
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -242,50 +393,51 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     }
 
 @app.get("/dashboard/stats", response_model=DashboardStats)
-async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     thirty_days_ago = today - timedelta(days=30)
     
-    # Helpers needed
-    def filter_attendance(uid=None, since=None):
-        count = 0
-        for a in db.attendances:
-            if uid and a.user_id != uid: continue
-            if since and a.date < since: continue
-            count += 1
-        return count
-
-    # Attendance Percentage
     if current_user.role == UserRole.ADMIN.value:
-        total_employees = len([u for u in db.users if u.role == UserRole.EMPLOYEE.value])
-        total_attendance = filter_attendance(since=thirty_days_ago)
+        total_employees = db.query(User).filter(User.role == UserRole.EMPLOYEE.value).count()
+        total_attendance = db.query(Attendance).filter(Attendance.date >= thirty_days_ago).count()
         working_days = 22
         expected = total_employees * working_days if total_employees > 0 else 1
         att_pct = min(100, (total_attendance / expected) * 100)
     else:
         total_employees = 1
-        user_att = filter_attendance(uid=current_user.id, since=thirty_days_ago)
+        user_att = db.query(Attendance).filter(and_(
+            Attendance.user_id == current_user.id,
+            Attendance.date >= thirty_days_ago
+        )).count()
         att_pct = min(100, (user_att / 22) * 100)
     
     # Pending Leaves
     if current_user.role == UserRole.ADMIN.value:
-        pending = len([l for l in db.leaves if l.status == LeaveStatus.PENDING.value])
+        pending = db.query(Leave).filter(Leave.status == LeaveStatus.PENDING.value).count()
     else:
-        pending = len([l for l in db.leaves if l.user_id == current_user.id and l.status == LeaveStatus.PENDING.value])
+        pending = db.query(Leave).filter(and_(
+            Leave.user_id == current_user.id,
+            Leave.status == LeaveStatus.PENDING.value
+        )).count()
     
     # Next Holiday
-    # Sort holidays by date
-    sorted_holidays = sorted([h for h in db.holidays if h.date >= today], key=lambda x: x.date)
-    next_nav = sorted_holidays[0] if sorted_holidays else None
+    next_nav = db.query(Holiday).filter(Holiday.date >= today).order_by(Holiday.date).first()
     next_holiday_str = f"{next_nav.name} ({next_nav.date.strftime('%b %d, %Y')})" if next_nav else None
 
     # Present Today
-    present_today = len([a for a in db.attendances if a.date == today and a.status == "Present"])
+    present_today = db.query(Attendance).filter(and_(
+        Attendance.date == today,
+        Attendance.status == "Present"
+    )).count()
     
     # On Leave Today
-    on_leave_today = len([l for l in db.leaves if l.start_date <= today <= l.end_date and l.status == LeaveStatus.APPROVED.value])
+    on_leave_today = db.query(Leave).filter(and_(
+        Leave.start_date <= today,
+        Leave.end_date >= today,
+        Leave.status == LeaveStatus.APPROVED.value
+    )).count()
     
-    total_emp_count = len([u for u in db.users if u.role == UserRole.EMPLOYEE.value])
+    total_emp_count = db.query(User).filter(User.role == UserRole.EMPLOYEE.value).count()
 
     return DashboardStats(
         attendance_percentage=round(att_pct, 1),
@@ -297,7 +449,7 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user), db
     )
 
 @app.post("/attendance/check-in", response_model=AttendanceResponse)
-async def check_in(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def check_in(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     now = datetime.now().time()
     
@@ -305,14 +457,18 @@ async def check_in(current_user: User = Depends(get_current_user), db: MockSessi
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot check in on weekends (Saturday/Sunday).")
 
     # Last attendance logic (find last one for user)
-    # Sort user's attendance by date desc, created_at desc (or id desc)
-    user_attendance = sorted([a for a in db.attendances if a.user_id == current_user.id], key=lambda x: (x.date, x.id), reverse=True)
-    last_attendance = user_attendance[0] if user_attendance else None
+    last_attendance = db.query(Attendance).filter(
+        Attendance.user_id == current_user.id
+    ).order_by(Attendance.date.desc(), Attendance.id.desc()).first()
 
     if last_attendance and last_attendance.out_time is None and last_attendance.date == today:
          raise HTTPException(status.HTTP_400_BAD_REQUEST, "You are already checked in! Please check out first.")
     
-    existing_today = next((a for a in db.attendances if a.user_id == current_user.id and a.date == today), None)
+    existing_today = db.query(Attendance).filter(and_(
+        Attendance.user_id == current_user.id,
+        Attendance.date == today
+    )).first()
+    
     if existing_today and existing_today.out_time:
          raise HTTPException(status.HTTP_400_BAD_REQUEST, "You have already completed your shift for today.")
     
@@ -325,47 +481,63 @@ async def check_in(current_user: User = Depends(get_current_user), db: MockSessi
         in_time=now
     )
     db.add(new_att)
+    db.commit()
+    db.refresh(new_att)
     return new_att
 
 @app.post("/attendance/check-out", response_model=AttendanceResponse)
-async def check_out(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def check_out(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     now = datetime.now().time()
     
     # Find active check-in
-    attendance = next((a for a in db.attendances if a.user_id == current_user.id and a.date == today and a.out_time is None), None)
+    attendance = db.query(Attendance).filter(and_(
+        Attendance.user_id == current_user.id,
+        Attendance.date == today,
+        Attendance.out_time.is_(None)
+    )).first()
     
     if not attendance:
-        completed = next((a for a in db.attendances if a.user_id == current_user.id and a.date == today and a.out_time is not None), None)
+        completed = db.query(Attendance).filter(and_(
+            Attendance.user_id == current_user.id,
+            Attendance.date == today,
+            Attendance.out_time.is_not(None)
+        )).first()
         if completed:
              raise HTTPException(status.HTTP_400_BAD_REQUEST, "You have already checked out today.")
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You are not checked in. Please check in first.")
     
     # Calculate hours
     if attendance.in_time:
-        in_dt = datetime.combine(today, attendance.in_time)
-        out_dt = datetime.combine(today, now)
-        dur = out_dt - in_dt
+        in_datetime = datetime.combine(today, attendance.in_time)
+        out_datetime = datetime.combine(today, now)
+        dur = out_datetime - in_datetime
         h, m = dur.seconds // 3600, (dur.seconds % 3600) // 60
         attendance.work_hours = f"{h}h {m}m"
     
     attendance.out_time = now
+    db.commit()
+    db.refresh(attendance)
     return attendance
 
 @app.get("/attendance/my-history", response_model=List[AttendanceResponse])
-async def get_my_attendance_history(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def get_my_attendance_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     start_date = today - timedelta(days=7)
     
-    records = [a for a in db.attendances if a.user_id == current_user.id and a.date >= start_date]
-    # Sort desc
-    records.sort(key=lambda x: x.date, reverse=True)
+    records = db.query(Attendance).filter(and_(
+        Attendance.user_id == current_user.id,
+        Attendance.date >= start_date
+    )).order_by(Attendance.date.desc()).all()
     return records
 
 @app.get("/attendance/today")
-async def get_today_attendance(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def get_today_attendance(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
-    att = next((a for a in db.attendances if a.user_id == current_user.id and a.date == today), None)
+    att = db.query(Attendance).filter(and_(
+        Attendance.user_id == current_user.id,
+        Attendance.date == today
+    )).first()
     
     if not att:
         return {"checked_in": False, "checked_out": False, "attendance": None}
@@ -377,7 +549,7 @@ async def get_today_attendance(current_user: User = Depends(get_current_user), d
     }
 
 @app.post("/leaves", response_model=LeaveResponse)
-async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if leave_data.end_date < leave_data.start_date:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "End date must be after start date")
     
@@ -386,10 +558,15 @@ async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(
     
     # Overlap
     # (StartA <= EndB) and (EndA >= StartB)
-    for l in db.leaves:
-        if l.user_id == current_user.id and l.status in [LeaveStatus.PENDING.value, LeaveStatus.APPROVED.value]:
-            if (l.start_date <= leave_data.end_date) and (l.end_date >= leave_data.start_date):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You already have a {l.status} leave request for this period.")
+    overlap = db.query(Leave).filter(and_(
+        Leave.user_id == current_user.id,
+        Leave.status.in_([LeaveStatus.PENDING.value, LeaveStatus.APPROVED.value]),
+        Leave.start_date <= leave_data.end_date,
+        Leave.end_date >= leave_data.start_date
+    )).first()
+    
+    if overlap:
+         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You already have a {overlap.status} leave request for this period.")
 
     new_leave = Leave(
         user_id=current_user.id,
@@ -399,27 +576,37 @@ async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(
         leave_type=leave_data.leave_type,
         status=LeaveStatus.PENDING.value
     )
-    new_leave.user_name = current_user.name # Populate for response
     db.add(new_leave)
-    return new_leave # Pydantic will extract attributes
+    db.commit()
+    db.refresh(new_leave)
+    return new_leave
 
 @app.get("/leaves", response_model=List[LeaveResponse])
-async def get_leaves(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def get_leaves(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role == UserRole.ADMIN.value:
-        res = sorted(db.leaves, key=lambda x: x.applied_at, reverse=True)
+        res = db.query(Leave).order_by(Leave.applied_at.desc()).all()
     else:
-        res = sorted([l for l in db.leaves if l.user_id == current_user.id], key=lambda x: x.applied_at, reverse=True)
-    
-    # Populate user_name manually
-    for l in res:
-         # Find user
-         u = next((u for u in db.users if u.id == l.user_id), None)
-         l.user_name = u.name if u else "Unknown"
-    return res
+        res = db.query(Leave).filter(Leave.user_id == current_user.id).order_by(Leave.applied_at.desc()).all()
+        
+    result = []
+    for leave in res:
+        user = db.query(User).filter(User.id == leave.user_id).first()
+        result.append(LeaveResponse(
+            id=leave.id,
+            start_date=leave.start_date,
+            end_date=leave.end_date,
+            reason=leave.reason,
+            leave_type=leave.leave_type,
+            status=leave.status,
+            applied_at=leave.applied_at,
+            user_id=leave.user_id,
+            user_name=user.name if user else None
+        ))
+    return result
 
 @app.put("/leaves/{leave_id}/status", response_model=LeaveResponse)
-async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, admin: User = Depends(get_admin_user), db: MockSession = Depends(get_db)):
-    leave = next((l for l in db.leaves if l.id == leave_id), None)
+async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, admin: User = Depends(get_admin_user), db: Session = Depends(get_db)):
+    leave = db.query(Leave).filter(Leave.id == leave_id).first()
     if not leave:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Leave request not found")
         
@@ -430,24 +617,37 @@ async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, a
     leave.reviewed_at = datetime.now()
     leave.reviewed_by = admin.id
     
-    u = next((u for u in db.users if u.id == leave.user_id), None)
-    leave.user_name = u.name if u else "Unknown"
+    db.commit()
+    db.refresh(leave)
     
-    return leave
+    user = db.query(User).filter(User.id == leave.user_id).first()
+    
+    return LeaveResponse(
+        id=leave.id,
+        start_date=leave.start_date,
+        end_date=leave.end_date,
+        reason=leave.reason,
+        leave_type=leave.leave_type,
+        status=leave.status,
+        applied_at=leave.applied_at,
+        user_id=leave.user_id,
+        user_name=user.name if user else None
+    )
 
 @app.get("/payroll/me", response_model=PayrollResponse)
-async def get_my_payroll(current_user: User = Depends(get_current_user), db: MockSession = Depends(get_db)):
+async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     start_of_month = date(today.year, today.month, 1)
     working_days = 22
     
-    present_days = len([a for a in db.attendances 
-                        if a.user_id == current_user.id 
-                        and a.date >= start_of_month 
-                        and a.status in ["Present", "Late", "Half-day"]])
+    present_days = db.query(Attendance).filter(and_(
+        Attendance.user_id == current_user.id,
+        Attendance.date >= start_of_month,
+        Attendance.status.in_(["Present", "Late", "Half-day"])
+    )).count()
                         
     absent_days = max(0, working_days - present_days)
-    base = float(current_user.base_salary) if hasattr(current_user, 'base_salary') else 50000.0
+    base = float(current_user.base_salary) if hasattr(current_user, 'base_salary') and current_user.base_salary else 50000.0
     tax = base * 0.12
     deductions = (base / 30) * absent_days
     net = base - tax - deductions
