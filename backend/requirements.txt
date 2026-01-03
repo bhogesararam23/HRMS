@@ -1,25 +1,12 @@
 # HRMS Backend Requirements
-# Python FastAPI Backend for HRMS System
+# Optimized for Vercel Serverless (No SQLAlchemy/SQLite)
 
-# Web Framework
 fastapi>=0.110.0
 uvicorn>=0.25.0
-
-# Database
-sqlalchemy>=2.0.0
-aiosqlite>=0.19.0
-
-# Authentication
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.9
-
-# Validation
 pydantic>=2.0.0
 email-validator>=2.0.0
-
-# CORS and HTTP
 starlette>=0.37.0
-
-# Utilities
 python-dotenv>=1.0.0
