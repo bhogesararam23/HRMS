@@ -639,25 +639,29 @@ async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, a
         user_name=user.name if user else None
     )
 
-@app.get("/payroll/me", response_model=PayrollResponse)
-async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # 1. Determine Previous Month Range
+from fastapi.responses import StreamingResponse
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+
+# ... [imports] ...
+
+def calculate_previous_month_payroll(user: User, db: Session) -> dict:
+    """Helper to calculate payroll for previous month"""
     today = date.today()
-    # First day of this month
     this_month_first = date(today.year, today.month, 1)
-    # Last day of previous month
     prev_month_last = this_month_first - timedelta(days=1)
-    # First day of previous month
     prev_month_first = date(prev_month_last.year, prev_month_last.month, 1)
     
-    # Label for UI
-    month_label = prev_month_first.strftime("%B %Y")
+    # DEBUG: Log the calculated dates
+    logger.info(f"PAYROLL DEBUG: today={today}, prev_month_first={prev_month_first}, prev_month_last={prev_month_last}")
     
-    # 2. Daily Iteration Logic for Previous Month
+    month_label = prev_month_first.strftime("%B %Y")
     days_in_month = (prev_month_last - prev_month_first).days + 1
     
     attendance_records = db.query(Attendance).filter(and_(
-        Attendance.user_id == current_user.id,
+        Attendance.user_id == user.id,
         Attendance.date >= prev_month_first,
         Attendance.date <= prev_month_last,
         Attendance.status.in_(["Present", "Late", "Half-day"])
@@ -665,7 +669,7 @@ async def get_my_payroll(current_user: User = Depends(get_current_user), db: Ses
     present_dates = {rec.date for rec in attendance_records}
     
     leaves = db.query(Leave).filter(and_(
-        Leave.user_id == current_user.id,
+        Leave.user_id == user.id,
         Leave.status == LeaveStatus.APPROVED.value,
         Leave.end_date >= prev_month_first,
         Leave.start_date <= prev_month_last
@@ -677,10 +681,8 @@ async def get_my_payroll(current_user: User = Depends(get_current_user), db: Ses
     )).all()
     holiday_dates = {h.date for h in holidays}
     
-    # Calculate Absences
     unpaid_absences = 0
     working_days_count = 0
-    
     iter_date = prev_month_first
     while iter_date <= prev_month_last:
         is_weekend = iter_date.weekday() >= 5
@@ -699,28 +701,98 @@ async def get_my_payroll(current_user: User = Depends(get_current_user), db: Ses
                         break
                 if not is_on_leave:
                     unpaid_absences += 1
-        
         iter_date += timedelta(days=1)
         
-    # 3. Financial Calculation
-    base = float(current_user.base_salary) if hasattr(current_user, 'base_salary') and current_user.base_salary else 50000.0
-    
+    base = float(user.base_salary) if hasattr(user, 'base_salary') and user.base_salary else 50000.0
     per_day_salary = base / days_in_month
-    
     deductions = per_day_salary * unpaid_absences
     tax = base * 0.12
     net = base - deductions - tax
-    
     if net < 0: net = 0
     
-    return PayrollResponse(
-        user_id=current_user.id,
-        name=current_user.name,
-        month=month_label,
-        base_salary=round(base, 2),
-        tax=round(tax, 2),
-        deductions=round(deductions, 2),
-        net_salary=round(net, 2),
-        absent_days=unpaid_absences,
-        working_days=working_days_count
+    return {
+        "user_id": user.id,
+        "name": user.name,
+        "month": month_label,
+        "base_salary": round(base, 2),
+        "tax": round(tax, 2),
+        "deductions": round(deductions, 2),
+        "net_salary": round(net, 2),
+        "absent_days": unpaid_absences,
+        "working_days": working_days_count
+    }
+
+@app.get("/payroll/me", response_model=PayrollResponse)
+async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    data = calculate_previous_month_payroll(current_user, db)
+    return PayrollResponse(**data)
+
+@app.get("/payroll/download")
+async def download_payslip(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    data = calculate_previous_month_payroll(current_user, db)
+    
+    # Generate PDF
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    
+    # Header
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(width/2, height - 50, "NexusHR Systems")
+    
+    c.setFont("Helvetica", 16)
+    c.drawCentredString(width/2, height - 80, f"Payslip for {data['month']}")
+    
+    # Employee Details
+    c.setFont("Helvetica", 12)
+    c.drawString(50, height - 130, f"Employee Name: {data['name']}")
+    c.drawString(50, height - 150, f"Employee ID: {data['user_id']}")
+    c.drawString(50, height - 170, f"Designation: {current_user.position}")
+    
+    # Table Header
+    y = height - 220
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Description")
+    c.drawRightString(width - 50, y, "Amount (INR)")
+    c.line(50, y - 5, width - 50, y - 5)
+    
+    # Table Content
+    y -= 30
+    c.setFont("Helvetica", 12)
+    
+    # Basic
+    c.drawString(50, y, "Basic Salary")
+    c.drawRightString(width - 50, y, f"{data['base_salary']:,.2f}")
+    y -= 25
+    
+    # Tax
+    c.drawString(50, y, "Tax Deductions (12%)")
+    c.drawRightString(width - 50, y, f"- {data['tax']:,.2f}")
+    y -= 25
+    
+    # Absences
+    c.drawString(50, y, f"Unpaid Leaves ({data['absent_days']} days)")
+    c.drawRightString(width - 50, y, f"- {data['deductions']:,.2f}")
+    y -= 25
+    
+    c.line(50, y + 5, width - 50, y + 5)
+    y -= 10
+    
+    # Net
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y, "Net Salary Payable")
+    c.drawRightString(width - 50, y, f"{data['net_salary']:,.2f}")
+    
+    # Footer
+    c.setFont("Helvetica-Oblique", 10)
+    c.drawCentredString(width/2, 50, "System Generated Document - NexusHR Systems")
+    
+    c.showPage()
+    c.save()
+    
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Payslip_{data["month"]}.pdf"'}
     )
