@@ -1,40 +1,138 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Calendar, Clock, CheckCircle, XCircle, LogIn, LogOut } from 'lucide-react';
-import { attendanceRecords } from '../data/mockData';
+import { Calendar, Clock, CheckCircle, XCircle, LogIn, LogOut, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Attendance() {
-  const { user } = useAuth();
+  const { authFetch } = useAuth();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [isCheckedOut, setIsCheckedOut] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
+  const [checkOutTime, setCheckOutTime] = useState(null);
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const myAttendance = attendanceRecords.filter(
-    record => record.employeeId === user.employeeId
-  );
+  // Fetch attendance data on mount
+  useEffect(() => {
+    fetchTodayStatus();
+    fetchAttendanceHistory();
+  }, []);
 
-  const handleCheckIn = () => {
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    setIsCheckedIn(true);
-    setCheckInTime(time);
-    toast.success(`Checked in at ${time}`);
+  const fetchTodayStatus = async () => {
+    try {
+      const response = await authFetch('/attendance/today');
+      if (response.ok) {
+        const data = await response.json();
+        setIsCheckedIn(data.checked_in);
+        setIsCheckedOut(data.checked_out);
+        if (data.attendance) {
+          setCheckInTime(data.attendance.in_time);
+          setCheckOutTime(data.attendance.out_time);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching today status:', error);
+    }
   };
 
-  const handleCheckOut = () => {
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    toast.success(`Checked out at ${time}`);
-    setIsCheckedIn(false);
-    setCheckInTime(null);
+  const fetchAttendanceHistory = async () => {
+    try {
+      setLoading(true);
+      const response = await authFetch('/attendance/my-history');
+      if (response.ok) {
+        const data = await response.json();
+        setAttendanceHistory(data);
+      }
+    } catch (error) {
+      console.error('Error fetching attendance history:', error);
+      toast.error('Failed to load attendance history');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const presentDays = myAttendance.filter(r => r.status === 'Present').length;
-  const absentDays = myAttendance.filter(r => r.status === 'Absent').length;
-  const attendanceRate = Math.round((presentDays / myAttendance.length) * 100);
+  const handleCheckIn = async () => {
+    setActionLoading(true);
+    try {
+      const response = await authFetch('/attendance/check-in', {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsCheckedIn(true);
+        setCheckInTime(data.in_time);
+        toast.success(`Checked in at ${formatTime(data.in_time)}`);
+        fetchAttendanceHistory(); // Refresh history
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || 'Failed to check in');
+      }
+    } catch (error) {
+      console.error('Check-in error:', error);
+      toast.error('Failed to check in');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    setActionLoading(true);
+    try {
+      const response = await authFetch('/attendance/check-out', {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsCheckedOut(true);
+        setCheckOutTime(data.out_time);
+        toast.success(`Checked out at ${formatTime(data.out_time)}. Total: ${data.work_hours}`);
+        fetchAttendanceHistory(); // Refresh history
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || 'Failed to check out');
+      }
+    } catch (error) {
+      console.error('Check-out error:', error);
+      toast.error('Failed to check out');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '-';
+    // Handle time string format (HH:MM:SS)
+    const parts = timeStr.split(':');
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0]);
+      const minutes = parts[1];
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12;
+      return `${hour12}:${minutes} ${ampm}`;
+    }
+    return timeStr;
+  };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Calculate stats from history
+  const presentDays = attendanceHistory.filter(r => r.status === 'Present' || r.status === 'Late').length;
+  const absentDays = attendanceHistory.filter(r => r.status === 'Absent').length;
+  const attendanceRate = attendanceHistory.length > 0
+    ? Math.round((presentDays / attendanceHistory.length) * 100)
+    : 100;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -54,33 +152,54 @@ export default function Attendance() {
               </div>
               <div>
                 <h3 className="text-2xl font-bold text-foreground">
-                  {isCheckedIn ? 'Checked In' : 'Not Checked In'}
+                  {isCheckedOut ? 'Day Complete' : isCheckedIn ? 'Checked In' : 'Not Checked In'}
                 </h3>
                 <p className="text-muted-foreground mt-1">
-                  {isCheckedIn ? `Since ${checkInTime}` : 'Mark your attendance for today'}
+                  {isCheckedIn && checkInTime && `In: ${formatTime(checkInTime)}`}
+                  {isCheckedOut && checkOutTime && ` • Out: ${formatTime(checkOutTime)}`}
+                  {!isCheckedIn && 'Mark your attendance for today'}
                 </p>
               </div>
             </div>
             <div className="flex gap-3">
               {!isCheckedIn ? (
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   onClick={handleCheckIn}
                   className="px-8 h-12"
+                  disabled={actionLoading}
                 >
-                  <LogIn className="w-5 h-5 mr-2" />
-                  Check In
+                  {actionLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <LogIn className="w-5 h-5 mr-2" />
+                      Check In
+                    </>
+                  )}
                 </Button>
-              ) : (
-                <Button 
-                  size="lg" 
+              ) : !isCheckedOut ? (
+                <Button
+                  size="lg"
                   variant="destructive"
                   onClick={handleCheckOut}
                   className="px-8 h-12"
+                  disabled={actionLoading}
                 >
-                  <LogOut className="w-5 h-5 mr-2" />
-                  Check Out
+                  {actionLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <LogOut className="w-5 h-5 mr-2" />
+                      Check Out
+                    </>
+                  )}
                 </Button>
+              ) : (
+                <Badge className="bg-success/20 text-success border-success/30 px-4 py-2 text-base">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Completed for Today
+                </Badge>
               )}
             </div>
           </div>
@@ -95,7 +214,7 @@ export default function Attendance() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Present Days</p>
                 <h3 className="text-3xl font-bold text-foreground mt-2">{presentDays}</h3>
-                <p className="text-xs text-muted-foreground mt-1">This month</p>
+                <p className="text-xs text-muted-foreground mt-1">Last 7 days</p>
               </div>
               <div className="bg-success/10 text-success p-3 rounded-lg">
                 <CheckCircle className="w-6 h-6" />
@@ -110,7 +229,7 @@ export default function Attendance() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Absent Days</p>
                 <h3 className="text-3xl font-bold text-foreground mt-2">{absentDays}</h3>
-                <p className="text-xs text-muted-foreground mt-1">This month</p>
+                <p className="text-xs text-muted-foreground mt-1">Last 7 days</p>
               </div>
               <div className="bg-destructive/10 text-destructive p-3 rounded-lg">
                 <XCircle className="w-6 h-6" />
@@ -125,7 +244,7 @@ export default function Attendance() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Attendance Rate</p>
                 <h3 className="text-3xl font-bold text-foreground mt-2">{attendanceRate}%</h3>
-                <p className="text-xs text-muted-foreground mt-1">This month</p>
+                <p className="text-xs text-muted-foreground mt-1">Last 7 days</p>
               </div>
               <div className="bg-primary/10 text-primary p-3 rounded-lg">
                 <Calendar className="w-6 h-6" />
@@ -138,51 +257,57 @@ export default function Attendance() {
       {/* Attendance History */}
       <Card>
         <CardHeader>
-          <CardTitle>Attendance History</CardTitle>
+          <CardTitle>Attendance History (Last 7 Days)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Check In</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Check Out</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Hours</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myAttendance.map((record) => (
-                  <tr key={record.id} className="border-b border-border hover:bg-accent transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          {new Date(record.date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm">{record.checkIn || '-'}</td>
-                    <td className="py-3 px-4 text-sm">{record.checkOut || '-'}</td>
-                    <td className="py-3 px-4 text-sm font-medium">{record.hours}h</td>
-                    <td className="py-3 px-4">
-                      <Badge 
-                        variant={record.status === 'Present' ? 'default' : 'destructive'}
-                        className="font-medium"
-                      >
-                        {record.status}
-                      </Badge>
-                    </td>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading history...</span>
+            </div>
+          ) : attendanceHistory.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Check In</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Check Out</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Hours</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {attendanceHistory.map((record) => (
+                    <tr key={record.id} className="border-b border-border hover:bg-accent transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{formatDate(record.date)}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm">{formatTime(record.in_time)}</td>
+                      <td className="py-3 px-4 text-sm">{formatTime(record.out_time)}</td>
+                      <td className="py-3 px-4 text-sm font-medium">{record.work_hours || '-'}</td>
+                      <td className="py-3 px-4">
+                        <Badge
+                          variant={record.status === 'Present' ? 'default' : record.status === 'Late' ? 'secondary' : 'destructive'}
+                          className="font-medium"
+                        >
+                          {record.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No attendance records yet</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

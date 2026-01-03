@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -7,35 +7,95 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Calendar, FileText, Plus } from 'lucide-react';
-import { leaveRequests } from '../data/mockData';
+import { Calendar, FileText, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Leaves() {
-  const { user } = useAuth();
+  const { authFetch } = useAuth();
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [myLeaves, setMyLeaves] = useState([]);
   const [formData, setFormData] = useState({
-    type: '',
-    startDate: '',
-    endDate: '',
+    leave_type: '',
+    start_date: '',
+    end_date: '',
     reason: ''
   });
 
-  const myLeaves = leaveRequests.filter(
-    request => request.employeeId === user.employeeId
-  );
+  // Fetch leaves on mount
+  useEffect(() => {
+    fetchMyLeaves();
+  }, []);
 
-  const handleSubmit = (e) => {
+  const fetchMyLeaves = async () => {
+    try {
+      setLoading(true);
+      const response = await authFetch('/leaves');
+      if (response.ok) {
+        const data = await response.json();
+        setMyLeaves(data);
+      }
+    } catch (error) {
+      console.error('Error fetching leaves:', error);
+      toast.error('Failed to load leave requests');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.type || !formData.startDate || !formData.endDate || !formData.reason) {
+
+    if (!formData.leave_type || !formData.start_date || !formData.end_date || !formData.reason) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    toast.success('Leave request submitted successfully!');
-    setShowForm(false);
-    setFormData({ type: '', startDate: '', endDate: '', reason: '' });
+    // Validate dates
+    const startDate = new Date(formData.start_date);
+    const endDate = new Date(formData.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (startDate < today) {
+      toast.error('Start date cannot be in the past');
+      return;
+    }
+
+    if (endDate < startDate) {
+      toast.error('End date must be after start date');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const response = await authFetch('/leaves', {
+        method: 'POST',
+        body: JSON.stringify({
+          leave_type: formData.leave_type,
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+          reason: formData.reason
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Leave request submitted successfully!');
+        setShowForm(false);
+        setFormData({ leave_type: '', start_date: '', end_date: '', reason: '' });
+        fetchMyLeaves(); // Refresh the list
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || 'Failed to submit leave request');
+      }
+    } catch (error) {
+      console.error('Submit error:', error);
+      toast.error('Failed to submit leave request');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -48,6 +108,30 @@ export default function Leaves() {
         return 'bg-warning/20 text-warning border-warning/30';
     }
   };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Calculate days between dates
+  const calculateDays = (start, end) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffTime = Math.abs(endDate - startDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
+
+  // Calculate leave stats
+  const approvedLeaves = myLeaves.filter(l => l.status === 'Approved');
+  const totalUsedDays = approvedLeaves.reduce((sum, leave) => {
+    return sum + calculateDays(leave.start_date, leave.end_date);
+  }, 0);
+  const remainingDays = 30 - totalUsedDays; // Assuming 30 days total leave
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -85,7 +169,7 @@ export default function Leaves() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Used</p>
-                <h3 className="text-3xl font-bold text-foreground mt-2">6</h3>
+                <h3 className="text-3xl font-bold text-foreground mt-2">{totalUsedDays}</h3>
                 <p className="text-xs text-muted-foreground mt-1">Days taken</p>
               </div>
               <div className="bg-warning/10 text-warning p-3 rounded-lg">
@@ -100,7 +184,7 @@ export default function Leaves() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Remaining</p>
-                <h3 className="text-3xl font-bold text-foreground mt-2">24</h3>
+                <h3 className="text-3xl font-bold text-foreground mt-2">{Math.max(0, remainingDays)}</h3>
                 <p className="text-xs text-muted-foreground mt-1">Days available</p>
               </div>
               <div className="bg-success/10 text-success p-3 rounded-lg">
@@ -122,18 +206,18 @@ export default function Leaves() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="type">Leave Type</Label>
-                  <Select 
-                    value={formData.type} 
-                    onValueChange={(value) => setFormData({...formData, type: value})}
+                  <Select
+                    value={formData.leave_type}
+                    onValueChange={(value) => setFormData({ ...formData, leave_type: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select leave type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Vacation">Vacation</SelectItem>
-                      <SelectItem value="Sick Leave">Sick Leave</SelectItem>
-                      <SelectItem value="Personal Leave">Personal Leave</SelectItem>
-                      <SelectItem value="Emergency Leave">Emergency Leave</SelectItem>
+                      <SelectItem value="Annual">Annual Leave</SelectItem>
+                      <SelectItem value="Sick">Sick Leave</SelectItem>
+                      <SelectItem value="Personal">Personal Leave</SelectItem>
+                      <SelectItem value="Emergency">Emergency Leave</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -143,8 +227,9 @@ export default function Leaves() {
                   <Input
                     id="startDate"
                     type="date"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
 
@@ -153,8 +238,9 @@ export default function Leaves() {
                   <Input
                     id="endDate"
                     type="date"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    min={formData.start_date || new Date().toISOString().split('T')[0]}
                   />
                 </div>
               </div>
@@ -165,13 +251,22 @@ export default function Leaves() {
                   id="reason"
                   placeholder="Please provide a reason for your leave request..."
                   value={formData.reason}
-                  onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                   rows={4}
                 />
               </div>
 
               <div className="flex gap-3">
-                <Button type="submit" size="lg">Submit Request</Button>
+                <Button type="submit" size="lg" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Request'
+                  )}
+                </Button>
                 <Button type="button" variant="outline" size="lg" onClick={() => setShowForm(false)}>
                   Cancel
                 </Button>
@@ -187,52 +282,55 @@ export default function Leaves() {
           <CardTitle>My Leave Requests</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {myLeaves.map((leave) => (
-              <div 
-                key={leave.id} 
-                className="p-4 border border-border rounded-lg hover:shadow-md transition-all"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Badge variant="outline" className="font-medium">
-                        {leave.type}
-                      </Badge>
-                      <Badge className={getStatusColor(leave.status)}>
-                        {leave.status}
-                      </Badge>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading leaves...</span>
+            </div>
+          ) : myLeaves.length > 0 ? (
+            <div className="space-y-4">
+              {myLeaves.map((leave) => (
+                <div
+                  key={leave.id}
+                  className="p-4 border border-border rounded-lg hover:shadow-md transition-all"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Badge variant="outline" className="font-medium">
+                          {leave.leave_type}
+                        </Badge>
+                        <Badge className={getStatusColor(leave.status)}>
+                          {leave.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-1">
+                        <span className="font-medium text-foreground">
+                          {formatDate(leave.start_date)}
+                        </span>
+                        {' '}→{' '}
+                        <span className="font-medium text-foreground">
+                          {formatDate(leave.end_date)}
+                        </span>
+                        {' '}({calculateDays(leave.start_date, leave.end_date)} days)
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Reason: {leave.reason}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">
-                      <span className="font-medium text-foreground">
-                        {new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                      {' '}→{' '}
-                      <span className="font-medium text-foreground">
-                        {new Date(leave.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                      {' '}({leave.days} days)
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Reason: {leave.reason}
-                    </p>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <p>Applied: {new Date(leave.appliedOn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                    {leave.approvedBy && (
-                      <p className="text-xs mt-1">Approved by Admin</p>
-                    )}
+                    <div className="text-sm text-muted-foreground">
+                      <p>Applied: {formatDate(leave.applied_at)}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            {myLeaves.length === 0 && (
-              <div className="text-center py-12">
-                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No leave requests yet</p>
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No leave requests yet</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

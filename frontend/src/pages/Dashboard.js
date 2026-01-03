@@ -1,25 +1,17 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { 
-  Users, 
-  UserCheck, 
-  Clock, 
+import {
+  Users,
+  UserCheck,
+  Clock,
   DollarSign,
   Calendar,
   TrendingUp,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
-import { 
-  employees, 
-  getLeaveBalance, 
-  getPendingApprovals, 
-  getTotalPayroll, 
-  getOnLeaveToday,
-  getAttendancePercentage,
-  holidays,
-  attendanceTrends
-} from '../data/mockData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
@@ -33,10 +25,69 @@ export default function Dashboard() {
 }
 
 function AdminDashboard() {
-  const stats = [
+  const { authFetch } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [pendingLeaves, setPendingLeaves] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch dashboard stats
+      const statsResponse = await authFetch('/dashboard/stats');
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData);
+      }
+
+      // Fetch pending leaves
+      const leavesResponse = await authFetch('/leaves');
+      if (leavesResponse.ok) {
+        const leavesData = await leavesResponse.json();
+        const pending = leavesData.filter(l => l.status === 'Pending');
+        setPendingLeaves(pending);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sample attendance trends data (could be fetched from backend)
+  const attendanceTrends = [
+    { date: 'Mon', present: 45, absent: 3, late: 2 },
+    { date: 'Tue', present: 47, absent: 2, late: 1 },
+    { date: 'Wed', present: 44, absent: 4, late: 2 },
+    { date: 'Thu', present: 48, absent: 1, late: 1 },
+    { date: 'Fri', present: 43, absent: 5, late: 2 },
+  ];
+
+  // Upcoming holidays
+  const upcomingHolidays = [
+    { id: 1, name: 'Republic Day', date: '2026-01-26', type: 'National' },
+    { id: 2, name: 'Holi', date: '2026-03-14', type: 'Festival' },
+    { id: 3, name: 'Independence Day', date: '2026-08-15', type: 'National' },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading dashboard...</span>
+      </div>
+    );
+  }
+
+  const dashboardStats = [
     {
       title: 'Total Employees',
-      value: employees.length,
+      value: stats?.total_employees || 0,
       icon: Users,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
@@ -44,7 +95,7 @@ function AdminDashboard() {
     },
     {
       title: 'On Leave Today',
-      value: getOnLeaveToday(),
+      value: stats?.on_leave_today || 0,
       icon: UserCheck,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
@@ -52,19 +103,19 @@ function AdminDashboard() {
     },
     {
       title: 'Pending Approvals',
-      value: getPendingApprovals().length,
+      value: stats?.pending_leaves || 0,
       icon: Clock,
       color: 'text-destructive',
       bgColor: 'bg-destructive/10',
       subtitle: 'requests'
     },
     {
-      title: 'Total Payroll',
-      value: `$${(getTotalPayroll() / 1000).toFixed(0)}K`,
+      title: 'Present Today',
+      value: stats?.present_today || 0,
       icon: DollarSign,
       color: 'text-success',
       bgColor: 'bg-success/10',
-      subtitle: 'per month'
+      subtitle: 'employees'
     }
   ];
 
@@ -78,7 +129,7 @@ function AdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
+        {dashboardStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <Card key={index} className="hover-lift">
@@ -114,7 +165,7 @@ function AdminDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <TrendingUp className="w-5 h-5 mr-2 text-primary" />
-              Attendance Trends (Last 7 Days)
+              Attendance Trends (Last 5 Days)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -123,7 +174,7 @@ function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{
                     backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
@@ -152,18 +203,18 @@ function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {getPendingApprovals().slice(0, 3).map((request) => (
+              {pendingLeaves.slice(0, 3).map((request) => (
                 <div key={request.id} className="flex items-center justify-between p-3 bg-accent rounded-lg">
                   <div>
-                    <p className="font-medium text-sm">{request.employeeName}</p>
-                    <p className="text-xs text-muted-foreground">{request.type} • {request.days} days</p>
+                    <p className="font-medium text-sm">{request.user_name || 'Employee'}</p>
+                    <p className="text-xs text-muted-foreground">{request.leave_type} • {calculateDays(request.start_date, request.end_date)} days</p>
                   </div>
                   <span className="text-xs px-2 py-1 bg-warning/20 text-warning rounded-full">
                     Pending
                   </span>
                 </div>
               ))}
-              {getPendingApprovals().length === 0 && (
+              {pendingLeaves.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No pending approvals
                 </p>
@@ -182,7 +233,7 @@ function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {holidays.slice(0, 3).map((holiday) => (
+              {upcomingHolidays.map((holiday) => (
                 <div key={holiday.id} className="flex items-center justify-between p-3 bg-accent rounded-lg">
                   <div>
                     <p className="font-medium text-sm">{holiday.name}</p>
@@ -202,42 +253,86 @@ function AdminDashboard() {
 }
 
 function EmployeeDashboard({ user }) {
-  const attendancePercentage = getAttendancePercentage(user.employeeId);
-  const leaveBalance = getLeaveBalance(user.employeeId);
-  const nextHoliday = holidays[0];
+  const { authFetch } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const stats = [
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const response = await authFetch('/dashboard/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sample attendance trends
+  const attendanceTrends = [
+    { date: 'Mon', present: 8 },
+    { date: 'Tue', present: 9 },
+    { date: 'Wed', present: 8 },
+    { date: 'Thu', present: 9 },
+    { date: 'Fri', present: 7 },
+  ];
+
+  // Upcoming holidays
+  const upcomingHolidays = [
+    { id: 1, name: 'Republic Day', date: '2026-01-26', type: 'National' },
+    { id: 2, name: 'Holi', date: '2026-03-14', type: 'Festival' },
+    { id: 3, name: 'Independence Day', date: '2026-08-15', type: 'National' },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading dashboard...</span>
+      </div>
+    );
+  }
+
+  const dashboardStats = [
     {
       title: 'Attendance',
-      value: `${attendancePercentage}%`,
+      value: `${stats?.attendance_percentage || 0}%`,
       icon: UserCheck,
       color: 'text-success',
       bgColor: 'bg-success/10',
       subtitle: 'This month'
     },
     {
-      title: 'Leave Balance',
-      value: leaveBalance,
+      title: 'Pending Leaves',
+      value: stats?.pending_leaves || 0,
       icon: Calendar,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
-      subtitle: 'days remaining'
+      subtitle: 'requests'
     },
     {
       title: 'Next Holiday',
-      value: nextHoliday.name,
+      value: stats?.next_holiday?.split(' (')[0] || 'None',
       icon: Calendar,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
-      subtitle: new Date(nextHoliday.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      subtitle: stats?.next_holiday?.match(/\((.*?)\)/)?.[1] || ''
     },
     {
-      title: 'Pending Requests',
-      value: '1',
+      title: 'Present Today',
+      value: stats?.present_today || 0,
       icon: FileText,
       color: 'text-destructive',
       bgColor: 'bg-destructive/10',
-      subtitle: 'leave request'
+      subtitle: 'colleagues'
     }
   ];
 
@@ -246,12 +341,12 @@ function EmployeeDashboard({ user }) {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-foreground">My Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Track your attendance, leaves, and payroll</p>
+        <p className="text-muted-foreground mt-1">Welcome back, {user?.name || 'User'}!</p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
+        {dashboardStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <Card key={index} className="hover-lift">
@@ -279,7 +374,7 @@ function EmployeeDashboard({ user }) {
         <CardHeader>
           <CardTitle className="flex items-center">
             <TrendingUp className="w-5 h-5 mr-2 text-primary" />
-            My Attendance (Last 7 Days)
+            My Attendance (Last 5 Days)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -288,7 +383,7 @@ function EmployeeDashboard({ user }) {
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
                   border: '1px solid hsl(var(--border))',
@@ -332,7 +427,7 @@ function EmployeeDashboard({ user }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {holidays.slice(0, 3).map((holiday) => (
+              {upcomingHolidays.map((holiday) => (
                 <div key={holiday.id} className="flex items-center justify-between p-3 bg-accent rounded-lg">
                   <div>
                     <p className="font-medium text-sm">{holiday.name}</p>
@@ -349,4 +444,12 @@ function EmployeeDashboard({ user }) {
       </div>
     </div>
   );
+}
+
+// Helper function
+function calculateDays(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffTime = Math.abs(endDate - startDate);
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 }
