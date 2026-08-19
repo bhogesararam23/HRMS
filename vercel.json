@@ -61,6 +61,13 @@
       }
     },
     {
+      "source": "/redoc(.*)",
+      "destination": {
+        "type": "service",
+        "service": "backend"
+      }
+    },
+    {
       "source": "/openapi.json",
       "destination": {
         "type": "service",

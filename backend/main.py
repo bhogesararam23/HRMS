@@ -133,16 +133,59 @@ class PayrollResponse(BaseModel):
 # FastAPI App Setup
 # ============================================================
 
+tags_metadata = [
+    {
+        "name": "Authentication",
+        "description": "User login, OAuth2 password bearer token generation, and role identification.",
+    },
+    {
+        "name": "Dashboard Metrics",
+        "description": "Real-time key performance indicators, attendance percentages, headcounts, and upcoming holidays.",
+    },
+    {
+        "name": "Attendance Tracking",
+        "description": "Smart shift state-machine operations: check-in, check-out, duration calculation, and 7-day history.",
+    },
+    {
+        "name": "Leave Management",
+        "description": "Employee leave submissions, conflict/overlap prevention, and administrator review/approval workflows.",
+    },
+    {
+        "name": "Payroll & Payslips",
+        "description": "Previous-month boundary salary calculation, tax deductions, and ReportLab PDF payslip generation.",
+    },
+    {
+        "name": "System & Database",
+        "description": "Database initialization and demo account seeding endpoint for cloud environments.",
+    },
+]
+
 app = FastAPI(
-    title="HRMS Backend API",
-    description="High-performance Python backend for HRMS system (Postgres/SQLite)",
-    version="1.0.0"
+    title="NexusHR Backend API",
+    description="""
+# 🚀 NexusHR Enterprise API
+
+The Logic-First Human Resource Management System backend API.
+
+## Core Capabilities
+* **🔐 Authentication**: OAuth2 Password flow with JWT tokens.
+* **⏰ Smart Attendance**: Shift state machine with automatic late calculation (> 09:30 AM) and double check-in prevention.
+* **🏖️ Leave Management**: Conflict-aware leave application with automatic overlap detection.
+* **💰 Zero-Error Payroll**: Dynamic boundary detection for preceding month payroll calculations.
+* **📄 ReportLab PDF**: Server-side binary PDF streaming for official payslips.
+* **⚡ Hybrid Database**: Works with PostgreSQL (`POSTGRES_URL`) and SQLite (`/tmp/hrms.db`).
+""",
+    version="1.0.0",
+    openapi_tags=tags_metadata,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
-# CORS Configuration for Render Deployment (Allow All)
+# CORS Configuration (Allow All)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for Vercel/Render communication
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -323,7 +366,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
 # Database Initialization Endpoint
 # ============================================================
 
-@app.get("/init-db")
+@app.get("/init-db", tags=["System & Database"], summary="Initialize Database and Seed Initial Accounts")
 async def init_database(db: Session = Depends(get_db)):
     """
     Initialize database tables and seed data.
@@ -372,7 +415,7 @@ async def init_database(db: Session = Depends(get_db)):
 # Endpoints (Restored SQLAlchemy Logic)
 # ============================================================
 
-@app.post("/token", response_model=Token)
+@app.post("/token", response_model=Token, tags=["Authentication"], summary="Login and Obtain JWT Access Token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -396,7 +439,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         "email": user.email
     }
 
-@app.get("/dashboard/stats", response_model=DashboardStats)
+@app.get("/dashboard/stats", response_model=DashboardStats, tags=["Dashboard Metrics"], summary="Get Role-Scoped Dashboard Statistics")
 async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     thirty_days_ago = today - timedelta(days=30)
@@ -452,7 +495,7 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user), db
         on_leave_today=on_leave_today
     )
 
-@app.post("/attendance/check-in", response_model=AttendanceResponse)
+@app.post("/attendance/check-in", response_model=AttendanceResponse, tags=["Attendance Tracking"], summary="Check In for Today's Shift")
 async def check_in(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     now = datetime.now().time()
@@ -490,7 +533,7 @@ async def check_in(current_user: User = Depends(get_current_user), db: Session =
     db.refresh(new_att)
     return new_att
 
-@app.post("/attendance/check-out", response_model=AttendanceResponse)
+@app.post("/attendance/check-out", response_model=AttendanceResponse, tags=["Attendance Tracking"], summary="Check Out and Finalize Shift")
 async def check_out(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     now = datetime.now().time()
@@ -525,7 +568,7 @@ async def check_out(current_user: User = Depends(get_current_user), db: Session 
     db.refresh(attendance)
     return attendance
 
-@app.get("/attendance/my-history", response_model=List[AttendanceResponse])
+@app.get("/attendance/my-history", response_model=List[AttendanceResponse], tags=["Attendance Tracking"], summary="Get 7-Day Attendance History")
 async def get_my_attendance_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     start_date = today - timedelta(days=7)
@@ -536,7 +579,7 @@ async def get_my_attendance_history(current_user: User = Depends(get_current_use
     )).order_by(Attendance.date.desc()).all()
     return records
 
-@app.get("/attendance/today")
+@app.get("/attendance/today", tags=["Attendance Tracking"], summary="Get Today's Shift Status")
 async def get_today_attendance(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = date.today()
     att = db.query(Attendance).filter(and_(
@@ -553,7 +596,7 @@ async def get_today_attendance(current_user: User = Depends(get_current_user), d
         "attendance": AttendanceResponse.model_validate(att)
     }
 
-@app.post("/leaves", response_model=LeaveResponse)
+@app.post("/leaves", response_model=LeaveResponse, tags=["Leave Management"], summary="Apply for Leave")
 async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if leave_data.end_date < leave_data.start_date:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "End date must be after start date")
@@ -586,7 +629,7 @@ async def apply_for_leave(leave_data: LeaveCreate, current_user: User = Depends(
     db.refresh(new_leave)
     return new_leave
 
-@app.get("/leaves", response_model=List[LeaveResponse])
+@app.get("/leaves", response_model=List[LeaveResponse], tags=["Leave Management"], summary="Get Leave Requests (Role-Scoped)")
 async def get_leaves(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role == UserRole.ADMIN.value:
         res = db.query(Leave).order_by(Leave.applied_at.desc()).all()
@@ -609,7 +652,7 @@ async def get_leaves(current_user: User = Depends(get_current_user), db: Session
         ))
     return result
 
-@app.put("/leaves/{leave_id}/status", response_model=LeaveResponse)
+@app.put("/leaves/{leave_id}/status", response_model=LeaveResponse, tags=["Leave Management"], summary="Update Leave Request Status (Admin Only)")
 async def update_leave_status(leave_id: int, status_update: LeaveStatusUpdate, admin: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     leave = db.query(Leave).filter(Leave.id == leave_id).first()
     if not leave:
@@ -722,12 +765,12 @@ def calculate_previous_month_payroll(user: User, db: Session) -> dict:
         "working_days": working_days_count
     }
 
-@app.get("/payroll/me", response_model=PayrollResponse)
+@app.get("/payroll/me", response_model=PayrollResponse, tags=["Payroll & Payslips"], summary="Get Previous Month Payroll Breakdown")
 async def get_my_payroll(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     data = calculate_previous_month_payroll(current_user, db)
     return PayrollResponse(**data)
 
-@app.get("/payroll/download")
+@app.get("/payroll/download", tags=["Payroll & Payslips"], summary="Download Official Payslip PDF")
 async def download_payslip(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     data = calculate_previous_month_payroll(current_user, db)
     

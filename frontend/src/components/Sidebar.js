@@ -11,7 +11,9 @@ import {
   CheckCircle,
   Building2,
   Menu,
-  X
+  X,
+  BookOpen,
+  ExternalLink
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -109,14 +111,44 @@ export default function Sidebar() {
           </nav>
 
           {/* Footer */}
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border space-y-3">
             <div className="px-4 py-3 bg-accent rounded-lg">
-              <p className="text-xs font-medium text-foreground mb-1">
-                {isAdmin ? 'Admin Access' : 'Employee Portal'}
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-foreground">
+                  {isAdmin ? 'Admin Access' : 'Employee Portal'}
+                </p>
+                <span className="text-[10px] bg-primary/10 text-primary font-mono px-1.5 py-0.5 rounded">v1.0.0</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">NexusHR Enterprise System</p>
+            </div>
+
+            {/* Live API Documentation links */}
+            <div className="pt-1">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-semibold px-2 mb-1.5">
+                Developer API
               </p>
-              <p className="text-xs text-muted-foreground">
-                Version 1.0.0
-              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <a
+                  href="/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent/80 py-1.5 px-2 rounded-md transition-colors border border-border"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Swagger</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+                <a
+                  href="/redoc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent/80 py-1.5 px-2 rounded-md transition-colors border border-border"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>ReDoc</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+              </div>
             </div>
           </div>
         </div>

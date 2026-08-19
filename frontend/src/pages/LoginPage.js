@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Building2, Lock, Mail, Loader2 } from 'lucide-react';
+import { Building2, Lock, Mail, Loader2, BookOpen, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -108,11 +108,45 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          <div className="mt-6 p-4 bg-accent rounded-lg border border-border">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Demo Credentials:</p>
-            <div className="space-y-1 text-xs">
-              <p className="text-foreground">Admin: <span className="font-mono bg-muted px-2 py-0.5 rounded">admin@hrms.com</span> / <span className="font-mono">admin123</span></p>
-              <p className="text-foreground">Employee: <span className="font-mono bg-muted px-2 py-0.5 rounded">employee@hrms.com</span> / <span className="font-mono">user123</span></p>
+          <div className="mt-6 p-4 bg-accent rounded-lg border border-border space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Demo Credentials:</p>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between items-center bg-card/60 px-2.5 py-1.5 rounded border border-border/50">
+                  <span className="font-medium text-foreground">Admin:</span>
+                  <span className="font-mono text-muted-foreground text-[11px]">admin@hrms.com / admin123</span>
+                </div>
+                <div className="flex justify-between items-center bg-card/60 px-2.5 py-1.5 rounded border border-border/50">
+                  <span className="font-medium text-foreground">Employee:</span>
+                  <span className="font-mono text-muted-foreground text-[11px]">employee@hrms.com / user123</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/60">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Interactive API Docs:</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <a
+                  href="/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center space-x-1.5 bg-card/80 hover:bg-card hover:text-primary py-1.5 px-2 rounded border border-border transition-colors font-medium text-foreground"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Swagger</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+                <a
+                  href="/redoc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center space-x-1.5 bg-card/80 hover:bg-card hover:text-primary py-1.5 px-2 rounded border border-border transition-colors font-medium text-foreground"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>ReDoc</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+              </div>
             </div>
           </div>
         </CardContent>
