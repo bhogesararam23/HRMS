@@ -1,10 +1,19 @@
 # 🚀 NexusHR — Modern, Logic-First HRMS
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel%20Deployment-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://hrms-sigma-brown.vercel.app/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+
 **NexusHR** is an enterprise-ready, logic-first Human Resource Management System (HRMS) engineered to eliminate common operational headaches like ghost payroll deductions, ambiguous attendance states, and chaotic leave approval workflows.
 
-Built with a high-performance **Python FastAPI** backend and a responsive **React 19** frontend, NexusHR enforces strict business logic at the API layer while delivering an intuitive, polished user experience.
-
 ---
+
+### 🌐 Live Deployment Links
+- 🚀 **Live Web Application**: [https://hrms-sigma-brown.vercel.app/](https://hrms-sigma-brown.vercel.app/)
+- 📖 **Interactive Swagger API Docs**: [https://hrms-sigma-brown.vercel.app/docs](https://hrms-sigma-brown.vercel.app/docs)
+- 📑 **ReDoc Documentation**: [https://hrms-sigma-brown.vercel.app/redoc](https://hrms-sigma-brown.vercel.app/redoc)
+- ⚡ **One-Click DB Seeder Endpoint**: [https://hrms-sigma-brown.vercel.app/init-db](https://hrms-sigma-brown.vercel.app/init-db)
 
 ## 🌟 Why NexusHR?
 
@@ -321,27 +330,12 @@ erDiagram
 
 ## 🚢 Production Deployment Guide
 
-### Deploying Backend
-1. **Provision PostgreSQL Database**: Provision a managed PostgreSQL instance (e.g. Supabase, Neon, AWS RDS, Render, or Railway).
-2. **Set Environment Variables**:
-   ```bash
-   POSTGRES_URL=postgresql://user:password@hostname:5432/hrms_db
-   SECRET_KEY=your-secure-random-256-bit-key
-   ```
-3. **Run with Production ASGI Server**:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port $PORT --workers 4
-   ```
-
-### Deploying Frontend
-1. **Set Backend API URL**:
-   Ensure `API_BASE_URL` in `frontend/src/contexts/AuthContext.js` points to your production backend URL or use an environment variable (`REACT_APP_API_URL`).
-2. **Build Production Assets**:
-   ```bash
-   cd frontend
-   npm run build
-   ```
-3. **Host Static Build**: Deploy the `frontend/build` directory to any static host (Vercel, Cloudflare Pages, Netlify, AWS S3 + CloudFront).
+### Vercel Deployment (Monorepo Multi-Services)
+The application is pre-configured for Vercel using `vercel.json` with multi-services:
+1. **Frontend Service**: React 19 SPA built from `frontend/` using Create React App / CRACO.
+2. **Backend Service**: FastAPI Python backend served from `backend/` via `main.py`.
+3. **Database Setup**: Connect any PostgreSQL database (e.g. Vercel Postgres, Supabase, Neon) by adding the `POSTGRES_URL` environment variable. In the absence of `POSTGRES_URL`, the backend automatically falls back to SQLite (`/tmp/hrms.db`).
+4. **Seed Database in Production**: Hit `https://hrms-sigma-brown.vercel.app/init-db` once after deployment to seed initial administrator and employee accounts.
 
 ---
 
