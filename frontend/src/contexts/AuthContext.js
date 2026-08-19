@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-
-const API_BASE_URL = 'http://localhost:8000';
+ 
+const API_BASE_URL = process.env.REACT_APP_API_URL !== undefined 
+  ? process.env.REACT_APP_API_URL 
+  : (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000');
 
 export const AuthContext = createContext(null);
 

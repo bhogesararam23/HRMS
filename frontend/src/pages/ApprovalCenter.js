@@ -6,7 +6,9 @@ import { Avatar, AvatarFallback } from '../components/ui/avatar';
 import { CheckCircle, XCircle, Clock, FileText, Calendar, User, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL !== undefined 
+  ? process.env.REACT_APP_API_URL 
+  : (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000');
 
 export default function ApprovalCenter() {
   const [requests, setRequests] = useState([]);

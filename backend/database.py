@@ -20,8 +20,12 @@ if DATABASE_URL:
     # Postgres Connection
     engine = create_engine(DATABASE_URL)
 else:
-    # Local SQLite Fallback
-    DATABASE_URL = "sqlite:///./hrms.db"
+    # Use /tmp on Vercel serverless (read-only filesystem workaround) or local hrms.db
+    if os.environ.get("VERCEL"):
+        DATABASE_URL = "sqlite:////tmp/hrms.db"
+    else:
+        DATABASE_URL = "sqlite:///./hrms.db"
+
     # check_same_thread needed for SQLite
     engine = create_engine(
         DATABASE_URL, connect_args={"check_same_thread": False}
