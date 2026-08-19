@@ -5,7 +5,8 @@
       "framework": "create-react-app"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "entrypoint": "main.py"
     }
   },
   "rewrites": [
