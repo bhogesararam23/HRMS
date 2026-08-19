@@ -1,7 +1,0 @@
-backend/
-backend/*
-requirements.txt
-*.py
-__pycache__/
-venv/
-hrms.db
