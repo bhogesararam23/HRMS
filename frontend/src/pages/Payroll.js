@@ -13,6 +13,7 @@ export default function Payroll() {
 
   useEffect(() => {
     fetchPayroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchPayroll = async () => {

@@ -1,6 +1,7 @@
 // craco.config.js
 const path = require("path");
 require("dotenv").config();
+process.env.CI = "false";
 
 // Environment variable overrides
 const config = {

@@ -26,6 +26,7 @@ export default function Leaves() {
   // Fetch leaves on mount
   useEffect(() => {
     fetchMyLeaves();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchMyLeaves = async () => {
