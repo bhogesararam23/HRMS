@@ -9,15 +9,11 @@ on:
 
 jobs:
   # ==========================================================
-  # Backend Testing & Linting Job
+  # Backend Testing Job
   # ==========================================================
   backend-ci:
     name: Backend CI (FastAPI & Pytest)
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: backend
 
     steps:
       - name: Checkout repository
@@ -28,16 +24,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov httpx
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-cov httpx "bcrypt<4.0.0"
 
       - name: Run automated Pytest test suite
         run: |
-          python -m pytest ../tests/ -v --tb=short
+          PYTHONPATH=backend pytest tests/ -v --tb=short
 
   # ==========================================================
   # Frontend Build & Verification Job
